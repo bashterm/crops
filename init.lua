@@ -15,6 +15,7 @@ crops.plants = {}
 crops.settings = {}
 
 local settings = {}
+local hydro = { }
 settings.easy = {
 	chance = 4,
 	interval = 30,
@@ -54,6 +55,8 @@ settings.difficult = {
 	damage_tick_max = 7,
 	damage_max = 100,
 }
+hydro.on = {}
+hydro.off = {}
 
 local worldpath = minetest.get_worldpath()
 local modpath = minetest.get_modpath(minetest.get_current_modname())
@@ -80,6 +83,10 @@ end
 if not crops.difficulty then
 	crops.difficulty = "normal"
 	minetest.log("error", "Defaulting to \"normal\" difficulty settings")
+end
+if not crops.hydro then
+	crops.hydro = "on"
+	minetest.log("error", "Defaulting to \"normal\" hydration settings")
 end
 crops.settings = settings[crops.difficulty]
 if not crops.settings then
@@ -119,10 +126,13 @@ crops.can_grow = function(pos)
 		return false
 	end
 	local meta = minetest.get_meta(pos)
-	local water = meta:get_int("crops_water")
-	if water < plant.properties.wither or water > plant.properties.soak then
-		if math.random(0,1) == 0 then
-			return false
+	if crops.hydro == "on" then
+		minetest.log("Crops: Hydro is on!")
+		local water = meta:get_int("crops_water")
+		if water < plant.properties.wither or water > plant.properties.soak then
+			if math.random(0,1) == 0 then
+				return false
+			end
 		end
 	end
 	local damage = meta:get_int("crops_damage")
@@ -132,8 +142,9 @@ crops.can_grow = function(pos)
 		end
 	end
 	-- growing costs water!
-	meta:set_int("crops_water", math.max(1, water - 10))
-
+	if crops.hydro == "on" then
+		meta:set_int("crops_water", math.max(1, water - 10))
+	end
 	-- allow the plant to grow
 	return true
 end
@@ -277,117 +288,117 @@ crops.die = function(pos)
 	plant.properties.die(pos)
 	minetest.sound_play("crops_flies", {pos=pos, gain=0.8})
 end
-
-minetest.register_tool("crops:watering_can", {
-	description = "Watering Can",
-	inventory_image = "crops_watering_can.png",
-	liquids_pointable = true,
-	range = 2.5,
-	stack_max = 1,
-	wear = 65535,
-	tool_capabilities = {},
-	on_use = function(itemstack, user, pointed_thing)
-		local pos = pointed_thing.under
-		local ppos = pos
-		if not pos then
-			return itemstack
-		end
-		-- filling it up?
-		local wear = itemstack:get_wear()
-		if minetest.get_item_group(minetest.get_node(pos).name, "water") >= 3 then
-			if wear ~= 1 then
-				minetest.sound_play("crops_watercan_entering", {pos=pos, gain=0.8})
-				minetest.after(math.random()/2, function(pos)
-					if math.random(2) == 1 then
-						minetest.sound_play("crops_watercan_splash_quiet", {pos=pos, gain=0.1})
-					end
-					if math.random(3) == 1 then
-						minetest.after(math.random()/2, function(pos)
-							minetest.sound_play("crops_watercan_splash_small", {pos=pos, gain=0.7})
-						end, pos)
-					end
-					if math.random(3) == 1 then
-						minetest.after(math.random()/2, function(pos)
-							minetest.sound_play("crops_watercan_splash_big", {pos=pos, gain=0.7})
-						end, pos)
-					end
-				end, pos)
-				itemstack:set_wear(1)
+if crops.hydro == "on" then
+	minetest.register_tool("crops:watering_can", {
+		description = "Watering Can",
+		inventory_image = "crops_watering_can.png",
+		liquids_pointable = true,
+		range = 2.5,
+		stack_max = 1,
+		wear = 65535,
+		tool_capabilities = {},
+		on_use = function(itemstack, user, pointed_thing)
+			local pos = pointed_thing.under
+			local ppos = pos
+			if not pos then
+				return itemstack
 			end
+			-- filling it up?
+			local wear = itemstack:get_wear()
+			if minetest.get_item_group(minetest.get_node(pos).name, "water") >= 3 then
+				if wear ~= 1 then
+					minetest.sound_play("crops_watercan_entering", {pos=pos, gain=0.8})
+					minetest.after(math.random()/2, function(pos)
+						if math.random(2) == 1 then
+							minetest.sound_play("crops_watercan_splash_quiet", {pos=pos, gain=0.1})
+						end
+						if math.random(3) == 1 then
+							minetest.after(math.random()/2, function(pos)
+								minetest.sound_play("crops_watercan_splash_small", {pos=pos, gain=0.7})
+							end, pos)
+						end
+						if math.random(3) == 1 then
+							minetest.after(math.random()/2, function(pos)
+								minetest.sound_play("crops_watercan_splash_big", {pos=pos, gain=0.7})
+							end, pos)
+						end
+					end, pos)
+					itemstack:set_wear(1)
+				end
+				return itemstack
+			end
+			-- using it on a top-half part of a plant?
+			local meta = minetest.get_meta(pos)
+			if meta:get_int("crops_top_half") == 1 then
+				meta = minetest.get_meta({x=pos.x, y=pos.y-1, z=pos.z})
+			end
+			-- using it on a plant?
+			local water = meta:get_int("crops_water")
+			if water < 1 then
+				return itemstack
+			end
+			-- empty?
+			if wear == 65534 then
+				return itemstack
+			end
+			crops.particles(ppos, 2)
+			minetest.sound_play("crops_watercan_watering", {pos=pos, gain=0.8})
+			water = math.min(water + crops.settings.watercan, crops.settings.watercan_max)
+			meta:set_int("crops_water", water)
+
+			itemstack:set_wear(math.min(65534, wear + (65535 / crops.settings.watercan_uses)))
 			return itemstack
-		end
-		-- using it on a top-half part of a plant?
-		local meta = minetest.get_meta(pos)
-		if meta:get_int("crops_top_half") == 1 then
-			meta = minetest.get_meta({x=pos.x, y=pos.y-1, z=pos.z})
-		end
-		-- using it on a plant?
-		local water = meta:get_int("crops_water")
-		if water < 1 then
+		end,
+	})
+
+	minetest.register_tool("crops:hydrometer", {
+		description = "Hydrometer",
+		inventory_image = "crops_hydrometer.png",
+		liquids_pointable = false,
+		range = 2.5,
+		stack_max = 1,
+		tool_capabilities = {
+		},
+		on_use = function(itemstack, user, pointed_thing)
+			local pos = pointed_thing.under
+			if not pos then
+				return itemstack
+			end
+			-- doublesize plant?
+			local meta = minetest.get_meta(pos)
+			if meta:get_int("crops_top_half") == 1 then
+				meta = minetest.get_meta({x=pos.x, y=pos.y-1, z=pos.z})
+			end
+
+			-- using it on a plant?
+			local water = meta:get_int("crops_water")
+			if water == nil then
+				itemstack:set_wear(65534)
+				return itemstack
+			end
+			itemstack:set_wear(65535 - ((65534 / 100) * water))
 			return itemstack
-		end
-		-- empty?
-		if wear == 65534 then
-			return itemstack
-		end
-		crops.particles(ppos, 2)
-		minetest.sound_play("crops_watercan_watering", {pos=pos, gain=0.8})
-		water = math.min(water + crops.settings.watercan, crops.settings.watercan_max)
-		meta:set_int("crops_water", water)
+		end,
+	})
 
-		itemstack:set_wear(math.min(65534, wear + (65535 / crops.settings.watercan_uses)))
-		return itemstack
-	end,
-})
+	minetest.register_craft({
+		output = "crops:watering_can",
+		recipe = {
+			{ "default:steel_ingot", "", "" },
+			{ "default:steel_ingot", "", "default:steel_ingot" },
+			{ "", "default:steel_ingot", "" },
+		},
+	})
 
-minetest.register_tool("crops:hydrometer", {
-	description = "Hydrometer",
-	inventory_image = "crops_hydrometer.png",
-	liquids_pointable = false,
-	range = 2.5,
-	stack_max = 1,
-	tool_capabilities = {
-	},
-	on_use = function(itemstack, user, pointed_thing)
-		local pos = pointed_thing.under
-		if not pos then
-			return itemstack
-		end
-		-- doublesize plant?
-		local meta = minetest.get_meta(pos)
-		if meta:get_int("crops_top_half") == 1 then
-			meta = minetest.get_meta({x=pos.x, y=pos.y-1, z=pos.z})
-		end
-
-		-- using it on a plant?
-		local water = meta:get_int("crops_water")
-		if water == nil then
-			itemstack:set_wear(65534)
-			return itemstack
-		end
-		itemstack:set_wear(65535 - ((65534 / 100) * water))
-		return itemstack
-	end,
-})
-
-minetest.register_craft({
-	output = "crops:watering_can",
-	recipe = {
-		{ "default:steel_ingot", "", "" },
-		{ "default:steel_ingot", "", "default:steel_ingot" },
-		{ "", "default:steel_ingot", "" },
-	},
-})
-
-minetest.register_craft({
-	output = "crops:hydrometer",
-	recipe = {
-		{ "default:mese_crystal_fragment", "", "" },
-		{ "", "default:steel_ingot", "" },
-		{ "", "", "default:steel_ingot" },
-	},
-})
-
+	minetest.register_craft({
+		output = "crops:hydrometer",
+		recipe = {
+			{ "default:mese_crystal_fragment", "", "" },
+			{ "", "default:steel_ingot", "" },
+			{ "", "", "default:steel_ingot" },
+		},
+	})
+end
 -- crop nodes, crafts, craftitems
 dofile(modpath .. "/melon.lua")
 dofile(modpath .. "/pumpkin.lua")
@@ -408,7 +419,9 @@ minetest.register_abm({
 	chance = crops.settings.damage_chance,
 	action = function(pos, node, active_object_count, active_object_count_wider)
 		local meta = minetest.get_meta(pos)
-		local water = meta:get_int("crops_water")
+		if crops.hydro == "on" then
+			local water = meta:get_int("crops_water")
+		end
 		local damage = meta:get_int("crops_damage")
 
 		-- get plant specific data
@@ -418,45 +431,47 @@ minetest.register_abm({
 		end
 
 		-- increase water for nearby water sources
-		local f = minetest.find_node_near(pos, 1, {"default:water_source", "default:water_flowing"})
-		if not f == nil then
-			water = math.min(100, water + 2)
-		else
-			local f = minetest.find_node_near(pos, 2, {"default:water_source", "default:water_flowing"})
+		if crops.hydro == "on" then
+			local f = minetest.find_node_near(pos, 1, {"default:water_source", "default:water_flowing"})
 			if not f == nil then
-				water = math.min(100, water + 1)
+			water = math.min(100, water + 2)
+			else
+				local f = minetest.find_node_near(pos, 2, {"default:water_source", "default:water_flowing"})
+				if not f == nil then
+					water = math.min(100, water + 1)
+				end
 			end
-		end
+		
+			if minetest.get_node_light(pos, nil) < plant.properties.night then
+				-- compensate for light: at night give some water back to the plant
+				water = math.min(100, water + 1)
+			else
+				-- dry out the plant
+				water = math.max(1, water - plant.properties.wateruse)
+			end
 
-		if minetest.get_node_light(pos, nil) < plant.properties.night then
-			-- compensate for light: at night give some water back to the plant
-			water = math.min(100, water + 1)
-		else
-			-- dry out the plant
-			water = math.max(1, water - plant.properties.wateruse)
-		end
-
-		meta:set_int("crops_water", water)
-
-		-- for convenience, copy water attribute to top half
-		if not plant.properties.doublesize == nil and plant.properties.doublesize then
-			local above = { x = pos.x, y = pos.y + 1, z = pos.z}
-			local meta = minetest.get_meta(above)
 			meta:set_int("crops_water", water)
-		end
 
-		if water <= plant.properties.wither_damage then
-			crops.particles(pos, 0)
-			damage = damage + math.random(crops.settings.damage_tick_min, crops.settings.damage_tick_max)
-		elseif water <= plant.properties.wither then
-			crops.particles(pos, 0)
-			return
-		elseif water >= plant.properties.soak_damage then
-			crops.particles(pos, 1)
-			damage = damage + math.random(crops.settings.damage_tick_min, crops.settings.damage_tick_max)
-		elseif water >= plant.properties.soak then
-			crops.particles(pos, 1)
-			return
+			-- for convenience, copy water attribute to top half
+			if not plant.properties.doublesize == nil and plant.properties.doublesize then
+				local above = { x = pos.x, y = pos.y + 1, z = pos.z}
+				local meta = minetest.get_meta(above)
+				meta:set_int("crops_water", water)
+			end
+
+			if water <= plant.properties.wither_damage then
+				crops.particles(pos, 0)
+				damage = damage + math.random(crops.settings.damage_tick_min, crops.settings.damage_tick_max)
+			elseif water <= plant.properties.wither then
+				crops.particles(pos, 0)
+				return
+			elseif water >= plant.properties.soak_damage then
+				crops.particles(pos, 1)
+				damage = damage + math.random(crops.settings.damage_tick_min, crops.settings.damage_tick_max)
+			elseif water >= plant.properties.soak then
+				crops.particles(pos, 1)
+				return
+			end
 		end
 		meta:set_int("crops_damage", math.min(crops.settings.damage_max, damage))
 
