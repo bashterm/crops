@@ -7,5 +7,4 @@
 --
 
 -- Valid values are "easy", "normal", and "difficult"
-crops.difficulty = "normal"
-crops.hydro = "off"
+crops.difficulty = "easy"
