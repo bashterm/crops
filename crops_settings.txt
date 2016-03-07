@@ -7,4 +7,6 @@
 --
 
 -- Valid values are "easy", "normal", and "difficult"
+
 crops.difficulty = "easy"
+

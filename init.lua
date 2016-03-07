@@ -15,6 +15,7 @@ crops.plants = {}
 crops.settings = {}
 
 local settings = {}
+local hydro = { }
 settings.easy = {
 	chance = 4,
 	interval = 30,
@@ -57,6 +58,8 @@ settings.difficult = {
 	damage_max = 100,
 	hydration = true,
 }
+
+
 local worldpath = minetest.get_worldpath()
 local modpath = minetest.get_modpath(minetest.get_current_modname())
 
@@ -82,6 +85,10 @@ end
 if not crops.difficulty then
 	crops.difficulty = "normal"
 	minetest.log("error", "Defaulting to \"normal\" difficulty settings")
+end
+if not crops.hydro then
+	crops.hydro = "on"
+	minetest.log("error", "Defaulting to \"normal\" hydration settings")
 end
 crops.settings = settings[crops.difficulty]
 if not crops.settings then
@@ -139,6 +146,7 @@ crops.can_grow = function(pos)
 		end
 	end
 	-- growing costs water!
+
 	if settings.hydration then
 		meta:set_int("crops_water", math.max(1, water - 10))
 	end
@@ -285,8 +293,12 @@ crops.die = function(pos)
 	plant.properties.die(pos)
 	minetest.sound_play("crops_flies", {pos=pos, gain=0.8})
 end
+
 if settings.hydration then
 	dofile(modpath .. "/tools.lua")
+
+
+	
 end
 -- crop nodes, crafts, craftitems
 dofile(modpath .. "/melon.lua")
@@ -300,7 +312,6 @@ local nodenames = {}
 for i = 1,table.getn(crops.plants) do
 	table.insert(nodenames, crops.plants[i].name)
 end
-
 -- water handling code
 if settings.hydration then
 	minetest.register_abm({
@@ -319,7 +330,6 @@ if settings.hydration then
 			end
 
 			-- increase water for nearby water sources
-		
 			local f = minetest.find_node_near(pos, 1, {"default:water_source", "default:water_flowing"})
 			if not f == nil then
 			water = math.min(100, water + 2)
@@ -329,7 +339,7 @@ if settings.hydration then
 					water = math.min(100, water + 1)
 				end
 			end
-	
+
 			if minetest.get_node_light(pos, nil) < plant.properties.night then
 				-- compensate for light: at night give some water back to the plant
 				water = math.min(100, water + 1)
@@ -346,6 +356,7 @@ if settings.hydration then
 				local meta = minetest.get_meta(above)
 				meta:set_int("crops_water", water)
 			end
+
 
 			if water <= plant.properties.wither_damage then
 				crops.particles(pos, 0)
